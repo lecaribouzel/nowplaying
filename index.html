@@ -34,7 +34,18 @@ body{display:flex;align-items:center;justify-content:center;font-family:'Figtree
 #track{margin-top:14px}
 #bar{height:4px;border-radius:2px;background:rgba(31,32,20,.18);position:relative}
 #fill{position:absolute;left:0;top:0;height:4px;width:0;border-radius:2px;background:#1f2014;transition:width .5s linear}
-#times{display:flex;justify-content:space-between;font-size:12px;opacity:.8;margin-top:6px}
+#times{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:4px}
+#times span{opacity:.8;min-width:34px}
+#times span:last-child{text-align:right}
+#ctrl{display:flex;align-items:center;gap:10px}
+#ctrl button{border:0;padding:0;border-radius:50%;background:rgba(31,32,20,.08);color:#1f2014;display:flex;align-items:center;justify-content:center;width:34px;height:34px;-webkit-tap-highlight-color:transparent}
+#ctrl button:active{background:rgba(31,32,20,.2)}
+#ctrl #pp{width:40px;height:40px;background:#1f2014;color:#e4e0c8}
+#ctrl svg{width:18px;height:18px;fill:currentColor}
+#pp svg{width:20px;height:20px}
+#pp .ic-play{display:none}
+.is-paused #pp .ic-play{display:block}
+.is-paused #pp .ic-pause{display:none}
 #login{color:#fff;position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
 #login[hidden]{display:none}
 #loginbox{width:420px;padding:28px 32px;border-radius:28px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);display:flex;flex-direction:column;gap:14px;text-align:center}
@@ -62,7 +73,13 @@ body{display:flex;align-items:center;justify-content:center;font-family:'Figtree
 <div id="artist">Lance un morceau sur Spotify</div>
 <div style="margin-top:14px">
 <div id="bar"><div id="fill"></div></div>
-<div id="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+<div id="times"><span id="cur">0:00</span>
+<div id="ctrl">
+<button id="prev" aria-label="Précédent"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg></button>
+<button id="pp" aria-label="Lecture / pause"><svg class="ic-pause" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg><svg class="ic-play" viewBox="0 0 24 24"><path d="M7 4.5v15L20 12z"/></svg></button>
+<button id="next" aria-label="Suivant"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l10.5-7z"/></svg></button>
+</div>
+<span id="dur">0:00</span></div>
 </div>
 </div>
 </div>
@@ -79,7 +96,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:'Figtree
 <script>
 (() => {
 const CLIENT_ID_CONST = 'COLLE_TON_CLIENT_ID_ICI';
-const SCOPE = 'user-read-currently-playing';
+const SCOPE = 'user-read-currently-playing user-modify-playback-state';
 const LS = window.localStorage;
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -140,6 +157,7 @@ async function login() {
     if (!v) { showErr('Colle ton Client ID Spotify'); return; }
     LS.setItem('np_client_id', v);
   }
+  LS.setItem('np_scope', SCOPE);
   const verifier = rand(64);
   LS.setItem('np_verifier', verifier);
   const params = new URLSearchParams({
@@ -274,6 +292,7 @@ function setIdle() {
   $('label').style.backgroundImage = '';
   setColors(DEFAULT_COLORS);
   stage.classList.add('paused');
+  stage.classList.add('is-paused');
 }
 
 function apply(d) {
@@ -288,6 +307,7 @@ function apply(d) {
   base.playing = !!d.is_playing;
   base.duration = it.duration_ms || 1;
   stage.classList.toggle('paused', !base.playing);
+  stage.classList.toggle('is-paused', !base.playing);
   if (id !== current) {
     current = id;
     setTrack(id, name, artist, imgs[0] ? imgs[0].url : '');
@@ -318,6 +338,44 @@ async function poll() {
     showErr('Connexion perdue');
     return 8000;
   }
+}
+
+async function control(method, path) {
+  const tk = await getToken();
+  if (!tk) { showLogin(); return; }
+  try {
+    const r = await fetch('https://api.spotify.com/v1/me/player/' + path, {
+      method: method,
+      headers: { Authorization: 'Bearer ' + tk }
+    });
+    if (r.status === 401 || r.status === 403) {
+      showErr('Droits manquants, reconnexion');
+      logout();
+    } else if (r.status === 404) {
+      showErr('Aucun appareil Spotify actif');
+    } else if (r.status === 429) {
+      showErr('Spotify demande de ralentir');
+    } else if (!r.ok) {
+      showErr('Erreur Spotify ' + r.status);
+    }
+  } catch (e) {
+    showErr('Connexion perdue');
+  }
+  setTimeout(() => { poll().catch(() => {}); }, 700);
+}
+
+function bindControls() {
+  $('pp').addEventListener('click', () => {
+    const play = !base.playing;
+    base.progress = Math.min(base.duration, base.progress + (base.playing ? performance.now() - base.t : 0));
+    base.t = performance.now();
+    base.playing = play;
+    stage.classList.toggle('paused', !play);
+    stage.classList.toggle('is-paused', !play);
+    control('PUT', play ? 'play' : 'pause');
+  });
+  $('next').addEventListener('click', () => control('POST', 'next'));
+  $('prev').addEventListener('click', () => control('POST', 'previous'));
 }
 
 async function loop() {
@@ -382,6 +440,12 @@ async function init() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lockScreen(); });
   document.addEventListener('click', () => { goFullscreen(); lockScreen(); });
   $('go').addEventListener('click', login);
+  bindControls();
+  if (LS.getItem('np_scope') !== SCOPE) {
+    LS.removeItem('np_token');
+    LS.removeItem('np_refresh');
+    LS.removeItem('np_exp');
+  }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
   const params = new URLSearchParams(location.search);
