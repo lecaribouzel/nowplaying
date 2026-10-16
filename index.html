@@ -29,7 +29,11 @@ body{display:flex;align-items:center;justify-content:center;font-family:'Figtree
 #panel{position:absolute;left:47px;top:48px;bottom:48px;width:420px;padding:32px 36px;border-radius:32px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);display:flex;flex-direction:column;justify-content:space-between}
 #time{font-size:112px;font-weight:700;line-height:1;letter-spacing:-4px}
 #date{font-size:17px;font-weight:500;opacity:.85;margin-top:4px}
-#title{font-size:26px;font-weight:700;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#title{font-size:26px;font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 94%,transparent);mask-image:linear-gradient(90deg,#000 94%,transparent)}
+#title.fits{-webkit-mask-image:none;mask-image:none}
+#tin{display:inline-block;will-change:transform}
+#title.scroll #tin{animation:slide var(--dur,8s) ease-in-out infinite alternate}
+@keyframes slide{0%,15%{transform:translateX(0)}85%,100%{transform:translateX(var(--dx))}}
 #artist{font-size:16px;opacity:.8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #track{margin-top:14px}
 #bar{height:4px;border-radius:2px;background:rgba(255,255,255,.3);position:relative}
@@ -69,7 +73,7 @@ body{display:flex;align-items:center;justify-content:center;font-family:'Figtree
 <div id="date"></div>
 </div>
 <div id="track">
-<div id="title">Rien en lecture</div>
+<div id="title"><span id="tin">Rien en lecture</span></div>
 <div id="artist">Lance un morceau sur Spotify</div>
 <div style="margin-top:14px">
 <div id="bar"><div id="fill"></div></div>
@@ -253,8 +257,26 @@ function extractColors(url) {
   });
 }
 
+function setTitle(text) {
+  const t = $('title'), i = $('tin');
+  i.textContent = text;
+  t.classList.remove('scroll', 'fits');
+  t.style.fontSize = '26px';
+  const w = t.clientWidth;
+  let fs = 26;
+  while (i.scrollWidth > w && fs > 19) { fs -= 1; t.style.fontSize = fs + 'px'; }
+  const over = i.scrollWidth - w;
+  if (over > 0) {
+    t.style.setProperty('--dx', -(over + 8) + 'px');
+    t.style.setProperty('--dur', Math.max(5, over / 25 + 3) + 's');
+    t.classList.add('scroll');
+  } else {
+    t.classList.add('fits');
+  }
+}
+
 async function setTrack(id, name, artist, url) {
-  $('title').textContent = name;
+  setTitle(name);
   $('artist').textContent = artist;
   if (!url) {
     $('label').style.backgroundImage = '';
@@ -271,7 +293,7 @@ function setIdle() {
   base.playing = false;
   base.progress = 0;
   base.duration = 1;
-  $('title').textContent = 'Rien en lecture';
+  setTitle('Rien en lecture');
   $('artist').textContent = 'Lance un morceau sur Spotify';
   $('label').style.backgroundImage = '';
   setColors(DEFAULT_COLORS);
