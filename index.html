@@ -86,7 +86,8 @@ const stage = $('stage');
 const root = document.documentElement;
 const DEFAULT_COLORS = ['#e4e0c8', '#c9c5a4', '#a3a07c'];
 const BEIGE = [[228,224,200],[201,197,164],[163,160,124]];
-const TINT = 0.22;
+const TINT = 0.5;
+const MIN_LUM = 120;
 const view = { dx: 0, dy: 0 };
 const base = { progress: 0, t: 0, playing: false, duration: 1 };
 let current = null;
@@ -224,7 +225,16 @@ function extractColors(url) {
         for (let i = 0; i < d.length; i += 4) { R += d[i]; G += d[i + 1]; B += d[i + 2]; }
         const n = d.length / 4;
         const avg = [R / n, G / n, B / n];
-        resolve(BEIGE.map(b => 'rgb(' + b.map((v, k) => Math.round(v * (1 - TINT) + avg[k] * TINT)).join(',') + ')'));
+        resolve(BEIGE.map(b => {
+          let t = TINT, m;
+          for (;;) {
+            m = b.map((v, k) => v * (1 - t) + avg[k] * t);
+            const lum = 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2];
+            if (lum >= MIN_LUM || t <= 0.05) break;
+            t -= 0.05;
+          }
+          return 'rgb(' + m.map(Math.round).join(',') + ')';
+        }));
       } catch (e) {
         resolve(null);
       }
