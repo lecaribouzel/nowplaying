@@ -212,7 +212,6 @@ function setColors(c) {
 function extractColors(url) {
   return new Promise(resolve => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
         const c = document.createElement('canvas');
@@ -240,11 +239,15 @@ function extractColors(url) {
           return 'rgb(' + m.map(Math.round).join(',') + ')';
         }));
       } catch (e) {
+        showErr('Couleurs : ' + e.message);
         resolve(null);
       }
     };
-    img.onerror = () => resolve(null);
-    img.src = url;
+    img.onerror = () => { showErr('Couleurs : image illisible'); resolve(null); };
+    fetch(url, { mode: 'cors', cache: 'no-store' })
+      .then(r => r.blob())
+      .then(bl => { img.src = URL.createObjectURL(bl); })
+      .catch(e => { showErr('Couleurs : ' + e.message); resolve(null); });
   });
 }
 
